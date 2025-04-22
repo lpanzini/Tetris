@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tetris</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    #inicio, #juego {
+      display: none;
+    }
+
+    #inicio.active, #juego.active {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    #juego {
+      background-color: black;
+      padding: 20px;
+    }
+
+    button {
+      padding: 15px 30px;
+      font-size: 18px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+
+    #tetris {
+      display: grid;
+      grid-template-columns: repeat(10, 20px);
+      grid-template-rows: repeat(20, 20px);
+      gap: 1px;
+      background-color: #222;
+      margin-top: 20px;
+    }
+
+    .cell {
+      width: 20px;
+      height: 20px;
+      background-color: #333;
+      border: 1px solid #111;
+    }
+
+    .tetromino {
+      border: 1px solid #000;
+    }
+
+    .l { background-color: #f39c12; }
+    .z { background-color: #c0392b; }
+    .t { background-color: #9b59b6; }
+    .o { background-color: #f1c40f; }
+    .i { background-color: #3498db; }
+
+    .flash {
+      animation: flash 0.2s alternate 3;
+    }
+
+    .blink {
+      animation: blink 0.2s alternate 3;
+    }
+
+    @keyframes flash {
+      from { background-color: orange; }
+      to { background-color: white; }
+    }
+
+    @keyframes blink {
+      from { background-color: white; }
+      to { background-color: #333; }
+    }
+
+    #info {
+      display: flex;
+      justify-content: space-between;
+      width: 400px;
+      margin: 10px auto;
+    }
+
+    #next {
+      display: grid;
+      grid-template-columns: repeat(4, 20px);
+      grid-template-rows: repeat(4, 20px);
+      gap: 1px;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+
+<div id="inicio" class="active">
+  <h1>¡Tetris Online!</h1>
+  <button onclick="iniciarJuego()">Jugar</button>
+</div>
+
+<div id="juego">
+  <h1>Tetris</h1>
+  <div id="info">
+    <div id="score">Puntos: 0</div>
+    <div id="level">Nivel: 1</div>
+  </div>
+  <div id="next"></div>
+  <div id="tetris"></div>
+  <div style="margin-top:20px;">
+    <strong>Controles:</strong><br>
+    ⬅️ Izquierda | ➡️ Derecha | ⬇️ Caer | Espacio: Rotar
+  </div>
+</div>
+
+<script>
+  const width = 10;
+  const height = 20;
+  let grid = document.getElementById('tetris');
+  let cells = [];
+  let timerId;
+  let score = 0;
+  let level = 1;
+  let speed = 500;
+
+  const nextGrid = document.getElementById('next');
+  const nextCells = [];
+  for (let i = 0; i < 16; i++) {
+    const cell = document.createElement('div');
+    cell.classList.add('cell');
+    nextGrid.appendChild(cell);
+    nextCells.push(cell);
+  }
+
+  const tetrominoes = [
+    {
+      shape: [
+        [1, width + 1, width * 2 + 1, 2],
+        [width, width + 1, width + 2, width * 2 + 2],
+        [1, width + 1, width * 2 + 1, width * 2],
+        [width, width * 2, width * 2 + 1, width * 2 + 2]
+      ],
+      preview: [1, 5, 9, 2],
+      class: 'l'
+    },
+    {
+      shape: [
+        [0, width, width + 1, width * 2 + 1],
+        [width + 1, width + 2, width * 2, width * 2 + 1],
+        [0, width, width + 1, width * 2 + 1],
+        [width + 1, width + 2, width * 2, width * 2 + 1]
+      ],
+      preview: [0, 4, 5, 9],
+      class: 'z'
+    },
+    {
+      shape: [
+        [1, width, width + 1, width + 2],
+        [1, width + 1, width + 2, width * 2 + 1],
+        [width, width + 1, width + 2, width * 2 + 1],
+        [1, width, width + 1, width * 2 + 1]
+      ],
+      preview: [1, 4, 5, 6],
+      class: 't'
+    },
+    {
+      shape: [
+        [0, 1, width, width + 1],
+        [0, 1, width, width + 1],
+        [0, 1, width, width + 1],
+        [0, 1, width, width + 1]
+      ],
+      preview: [0, 1, 4, 5],
+      class: 'o'
+    },
+    {
+      shape: [
+        [1, width + 1, width * 2 + 1, width * 3 + 1],
+        [width, width + 1, width + 2, width + 3],
+        [1, width + 1, width * 2 + 1, width * 3 + 1],
+        [width, width + 1, width + 2, width + 3]
+      ],
+      preview: [1, 5, 9, 13],
+      class: 'i'
+    }
+  ];
+
+  let currentPosition = 4;
+  let currentRotation = 0;
+  let currentTetromino;
+  let currentClass;
+  let current;
+  let next = tetrominoes[Math.floor(Math.random() * tetrominoes.length)];
+
+  function iniciarJuego() {
+    document.getElementById('inicio').classList.remove('active');
+    document.getElementById('juego').classList.add('active');
+
+    for (let i = 0; i < width * height; i++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      grid.appendChild(cell);
+      cells.push(cell);
+    }
+
+    generarNuevoTetromino();
+    draw();
+    timerId = setInterval(moveDown, speed);
+    document.addEventListener('keydown', handleKeyDown);
+  }
+
+  function draw() {
+    currentTetromino.forEach(index => {
+      cells[currentPosition + index].classList.add('tetromino', currentClass);
+    });
+  }
+
+  function undraw() {
+    currentTetromino.forEach(index => {
+      cells[currentPosition + index].classList.remove('tetromino', currentClass);
+    });
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'ArrowLeft') move(-1);
+    else if (e.key === 'ArrowRight') move(1);
+    else if (e.key === 'ArrowDown') moveDown();
+    else if (e.key === ' ') rotate();
+  }
+
+  function move(offset) {
+    undraw();
+    const isAtEdge = currentTetromino.some(index => {
+      const col = (currentPosition + index) % width;
+      return (offset === -1 && col === 0) || (offset === 1 && col === width - 1);
+    });
+    const willCollide = currentTetromino.some(index =>
+      cells[currentPosition + index + offset].classList.contains('taken')
+    );
+    if (!isAtEdge && !willCollide) {
+      currentPosition += offset;
+    }
+    draw();
+  }
+
+  function moveDown() {
+    undraw();
+    const willCollide = currentTetromino.some(index => {
+      const next = currentPosition + index + width;
+      return next >= width * height || cells[next].classList.contains('taken');
+    });
+    if (!willCollide) {
+      currentPosition += width;
+      draw();
+    } else {
+      currentTetromino.forEach(index => {
+        cells[currentPosition + index].classList.add('tetromino', currentClass, 'taken');
+      });
+      addScore();
+      clearLines();
+      generarNuevoTetromino();
+      if (currentTetromino.some(index => cells[currentPosition + index].classList.contains('taken'))) {
+        clearInterval(timerId);
+        alert('¡Game Over!');
+        return;
+      }
+      draw();
+    }
+  }
+
+  function rotate() {
+    undraw();
+    const nextRotation = (currentRotation + 1) % 4;
+    const nextShape = current.shape[nextRotation];
+    const newPos = nextShape.map(index => currentPosition + index);
+    const isValid = newPos.every(pos =>
+      pos >= 0 && pos < width * height &&
+      pos % width >= 0 && pos % width < width &&
+      !cells[pos].classList.contains('taken')
+    );
+    if (isValid) {
+      currentRotation = nextRotation;
+      currentTetromino = nextShape;
+    }
+    draw();
+  }
+
+  function clearLines() {
+    for (let row = 0; row < height; row++) {
+      const line = [];
+      for (let col = 0; col < width; col++) {
+        line.push(row * width + col);
+      }
+      if (line.every(index => cells[index].classList.contains('taken'))) {
+        line.forEach(index => cells[index].classList.add('blink'));
+        setTimeout(() => {
+          line.forEach(index => {
+            cells[index].classList.remove('taken', 'tetromino', 'l', 'z', 't', 'o', 'i', 'blink');
+          });
+          const removed = cells.splice(row * width, width);
+          removed.forEach(cell => grid.removeChild(cell));
+          for (let i = 0; i < width; i++) {
+            const div = document.createElement('div');
+            div.classList.add('cell');
+            grid.prepend(div);
+            cells.unshift(div);
+          }
+        }, 200);
+      }
+    }
+  }
+
+  function addScore() {
+    score += 10;
+    document.getElementById('score').textContent = `Puntos: ${score}`;
+    if (score >= level * 75) {
+      level++;
+      speed = Math.max(100, speed - 75);
+      clearInterval(timerId);
+      timerId = setInterval(moveDown, speed);
+      document.getElementById('level').textContent = `Nivel: ${level}`;
+      grid.classList.add('flash');
+      setTimeout(() => grid.classList.remove('flash'), 600);
+    }
+  }
+
+  function generarNuevoTetromino() {
+    currentPosition = 4;
+    currentRotation = 0;
+    current = next;
+    currentTetromino = current.shape[currentRotation];
+    currentClass = current.class;
+    next = tetrominoes[Math.floor(Math.random() * tetrominoes.length)];
+    updateNextPreview();
+  }
+
+  function updateNextPreview() {
+    nextCells.forEach(cell => cell.className = 'cell');
+    next.preview.forEach(i => nextCells[i].classList.add('tetromino', next.class));
+  }
+</script>
+</body>
+</html>
